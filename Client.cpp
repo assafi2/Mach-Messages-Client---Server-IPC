@@ -25,18 +25,6 @@ using namespace std ;
 
 
 	}
-/*
-	mach_port_t Client::get_bs_port() {
-		return bs_port ;
-	}
-
-	mach_port_t Client::get_service_port() {
-		return service_port ;
-	}
-	task_t Client::get_cur_task() {
-		return cur_task ;
-	}
-*/
 
 
 
