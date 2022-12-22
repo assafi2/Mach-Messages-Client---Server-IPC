@@ -24,14 +24,15 @@ typedef struct serve_args {
 
 using namespace std ;
 
-// NEED TO WORK OUT CONSTRUCTORS
+// overloaded for construction with manual registration
 /*
-SaveServer::SaveServer() {
+SaveServer::SaveServer() : dHash(*(DataTable*)NULL) {
 
 
 	SaveServer(true) ;
 }
 */
+
 // manual == false when SaveServer instance created due to bootstrap_check_in call
 // with corresponding service name (therefore will be registered)
 // otherwise signifies manual registering logic to be applied
@@ -71,11 +72,15 @@ SaveServer::SaveServer(bool manual) : dHash(*(new DataTable(TABLE_SIZE))) {
 		}
 
 	running = false ;
-	numOfThreads = MAX_THREADS ;
+	maxNumOfThreads = MAX_THREADS ;
 	nextThread = 0 ;
-	semaphore_create(cur_task,&nextThreadLock, SYNC_POLICY_FIFO, 1) ;  // lock on next thread pool entry
+
+	// 0 set threads array
+	memset(threads, 0, sizeof(pthread_t) * MAX_THREADS) ;
 
 	cout << "save_service mach port #  : " << ss_port << endl ;
+
+
 
 	// run collector as thread
 
@@ -247,25 +252,18 @@ int SaveServer::processMessage(void* mach_msg, short op) {
 				default :
 					return EDOM ; // num arg out of domain
 	}
-	int err ; // return value
+	int err = 0  ; // also return value
 	sargs_t args ;
 	args.server = this ;
 	args.msg = mach_msg ;
 
-	// acquire lock to manipulate thread table
-	semaphore_wait(nextThreadLock) ;
 
-	err = pthread_create(&threads[nextThread], NULL, func_op, &args);
-
-	// for concurrent processing of more than 30 threads might cause bad results !
-	// (could be solve with waiting to get into the pool)
-
-	if (err==0) {   // TODO change second arg to be consecutive thread
+	if (threads[nextThread] != 0 ) {  // entry for an existed thread
 		err = pthread_join(threads[nextThread],NULL) ;
 	}
-	nextThread = (nextThread + 1) % MAX_THREADS ;
-	// release lock
-	semaphore_signal(nextThreadLock) ;
+	if (err == 0)
+		pthread_create(&threads[nextThread], NULL, func_op, &args);
+	nextThread = (nextThread + 1) % maxNumOfThreads ;
 	return err ;
 } ;
 
@@ -285,7 +283,6 @@ int main(int argc, char** argv) {
 		ss.runServer() ;
 
 		cout << "server stopped" << endl ;
-
 	}
 
 	if (f ==0)  { // client(s)
