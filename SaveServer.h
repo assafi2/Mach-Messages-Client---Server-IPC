@@ -19,14 +19,6 @@
 
 typedef uint64_t data_t ;
 
-// struct to hold save's table entry
-typedef struct map_entry {
-
-	semaphore_t lock ;
-	int size ;
-	data_t data ;
-} map_entry_t ;
-
 class SaveServer {
 
 
@@ -36,10 +28,9 @@ class SaveServer {
 
 	DataTable& dHash ; // saved data hash table
 	pthread_t threads[MAX_THREADS]; // "thread pool"  - working with pthreads instead of mach threads for comfortability
-	int numOfThreads ;
-	int nextThread ; // next thread entry in the pool, synchronized
+	int maxNumOfThreads ;  // actual max num of possible service threads, to be settable
+ 	int nextThread ; // next thread entry in the pool, synchronized
 	bool running ; // server state
-	semaphore_t nextThreadLock ;  // mach bin sem for manipulating nextThread entry within the table
 	pthread_t collectorThread ;  // task's garbage collector
 
 
