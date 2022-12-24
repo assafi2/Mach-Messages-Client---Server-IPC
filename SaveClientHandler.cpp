@@ -14,7 +14,6 @@
 #include "Client.h"
 #include "SaveClientHandler.h"
 #include "SaveServiceDefinitions.h" // structs definitions etc ...
-//#include "ClientServerAPI.cpp"
 #include <string.h>
 
 
