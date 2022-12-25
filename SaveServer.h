@@ -37,7 +37,7 @@ class SaveServer {
 	DataTable& dHash ; // saved data hash table
 	pthread_t threads[MAX_THREADS]; // "thread pool"  - working with pthreads instead of mach threads for comfortability
 	int maxNumOfThreads ;  // actual max num of possible service threads, to be settable
- 	int nextThread ; // next thread entry in the pool, synchronized
+ 	int nextThread ; // next thread entry in the pool
 	bool running ; // server state
 	pthread_t collectorThread ;  // task's garbage collector
 
