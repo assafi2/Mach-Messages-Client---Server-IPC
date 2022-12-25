@@ -18,14 +18,6 @@
 
 typedef uint64_t data_t ;
 
-// struct to hold save's table entry
-typedef struct map_entry {
-
-	semaphore_t lock ;
-	int size ;
-	data_t data ;
-} map_entry_t ;
-
 class SaveServer {
 
 
@@ -38,7 +30,7 @@ class SaveServer {
 	int maxNumOfThreads ;  // actual max num of possible service threads, to be settable
  	int nextThread ; // next thread entry in the pool
 	bool running ; // server state
-	pthread_t collectorThread ;  // task's garbage collector
+	pthread_t collectorThread ;  // processes's garbage collector
 
 
 
