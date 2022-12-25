@@ -11,7 +11,6 @@
 #ifndef SAVE_SERVER_H
 #define SAVE_SERVER_H
 
-#define MAX_TASKS   // upper id for tasks range
 #define MAX_THREADS 30   // numbers of service threads
 #define DATA_RECEIVE 0
 #define DATA_SEND 1
