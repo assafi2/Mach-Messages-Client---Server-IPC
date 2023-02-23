@@ -18,7 +18,7 @@ Client functionalities :
  - able to find server as a system service 
 
 
-Server funtionalities : 
+Server functionalities : 
 
 - visible as a system service to other processes (com.apple.save_service) 
 
