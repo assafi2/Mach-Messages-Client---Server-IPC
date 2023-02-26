@@ -10,7 +10,7 @@
 #include <mach/task.h>
 #include <pthread.h>
 #include <mach/semaphore.h>
-#include "saveServiceDefinitions.h"
+#include "SaveServiceDefinitions.h"
 
 
 #include <iostream>
@@ -22,7 +22,7 @@ using namespace std ;
  * Hash table to hold data entries
  * table will contain fixed number of buckets and resolve collisions with chaining
  * do not support dynamic number of buckets
- * a process can have at most 1 data entry in the table, process IDs (int) are the table keys
+ * a task can have at most 1 data entry in the table, tasks ports (task_t) are the table keys
  */
 
 #define TABLE_SIZE 30
@@ -37,6 +37,7 @@ class DataTable {
 		int pid ;
 		semaphore_t lock ;
 		data_t data ;
+		natural_t d_size ; // data size
 		mach_port_t* portlists ; // a buffer for dynamic arrays retrieving as part getting info on specific task
 	} chain_entry_t ;
 
@@ -63,10 +64,10 @@ public :
 
 	// hashing pid value over the table to retrieve data
 	// if an entry corresponding to the process not exist return null
-	data_t getData(int pid) ;
+	data_info_t getData(int pid) ;
 
 	// add / update (in case entry exist) data for given pid
-	void updateData(int pid, data_t data) ;
+	void updateData(int pid, data_t data, natural_t d_size) ;
 
 	// garbage collect (deallocate) data of terminated processes
 	// not good collect function which keep entries of deallocated (collected) data in the chain ...

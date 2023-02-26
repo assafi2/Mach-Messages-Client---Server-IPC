@@ -3,6 +3,7 @@
 
 
 	DataTable::DataTable(int size) {
+
 		this->size = size ;
 		buckets = (bucket_t*)(calloc(size,sizeof(bucket_t))) ;
 		cur_task = mach_task_self() ;
@@ -21,54 +22,57 @@
 		free(buckets) ;
 	}
 
-	data_t DataTable::getData(int pid) {
+	data_info_t DataTable::getData(int pid) {
 
-		cout << "in get data " << endl ;
+		data_info_t retData ;
+		retData.ptr = NULL ;
 		chain_entry_t *entry = find(pid) ;
 		if (entry == NULL) {
-			return NULL ;
+			return retData ; // d_size field value garbage
 		}
 		semaphore_wait(entry->lock) ;
-		if (entry->data = NULL) return NULL ; // outdated
+		retData.ptr = entry->data ; // NULL in case of outdated / invalid data
+		retData.size = entry->d_size ;
 		semaphore_signal(entry->lock) ;
-		return entry->data ;
+
+		return retData ;
 	}
 	// add / update (in case entry exist) data for given process
-	void DataTable::updateData(int pid, data_t data){
+	void DataTable::updateData(int pid, data_t data, natural_t d_size){
 
 		chain_entry_t *entry = find(pid) ;
-
 		if (entry != NULL) {
 			semaphore_wait(entry->lock) ;
 			entry->data = data ;
+			entry->d_size = d_size ;
     		semaphore_signal(entry->lock) ;
 			return ;
 		}
 		// acquire bucket's addlock
-		bucket_t b = buckets[pid % size] ;
-		semaphore_wait(b.addlock) ;
+		bucket_t* b = &(buckets[pid % size]) ;
+		semaphore_wait(b->addlock) ;
 		// new entry
 		chain_entry_t *newEntry = (chain_entry_t*) malloc(sizeof(chain_entry_t)) ;
 		newEntry->data = data ;
 		newEntry->pid = pid ;
+		newEntry->d_size = d_size ;
 		semaphore_create(cur_task,&(newEntry->lock), SYNC_POLICY_FIFO, 1) ;
 
 		// add logic
-		if (b.chain == NULL)
+		if (b->chain == NULL)
 		{
 			newEntry->forward_entry = newEntry ;
 			newEntry->backward_entry = newEntry ;
-			b.chain = newEntry ;
-	//		cout << "task for update " << task << " size of buckets " << size << endl ;
+			b->chain = newEntry ;
 
 		}
 		else {
-			newEntry->forward_entry = b.chain ; // first pointing from new entry
-			newEntry->backward_entry = b.chain->backward_entry ;
-			b.chain->backward_entry = newEntry ;
-			b.chain->backward_entry->forward_entry = newEntry ; // after pointing to new entry
+			newEntry->forward_entry = b->chain ; // first pointing from new entry
+			newEntry->backward_entry = b->chain->backward_entry ;
+			b->chain->backward_entry = newEntry ;
+			b->chain->backward_entry->forward_entry = newEntry ; // after pointing to new entry
 		}
-		semaphore_signal(b.addlock) ;
+		semaphore_signal(b->addlock) ;
 
 		return ;
 	}
@@ -88,7 +92,7 @@
 	}
 
 
-	// grabage collect (deallocate) data of terminated processes
+	// garbage collect (deallocate) data of terminated processes
 	// not good collect function which keep entries of deallocated (collected) data in the chain ...
 	// this can lead to bad performance within time after termination and keep servicing of more client processes
 	// should be changed .
@@ -131,6 +135,7 @@
 	DataTable::chain_entry_t* DataTable::find(int pid) {
 
 		chain_entry_t *first = buckets[pid % size].chain ;
+
 		// traverse
 		if (first == NULL) return NULL ;
 		chain_entry_t *entry = first ;

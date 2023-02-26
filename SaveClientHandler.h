@@ -14,7 +14,22 @@
 #ifndef SAVE_CLIENT_HANDLER_H
 #define SAVE_CLIENT_HANDLER_H
 
-typedef uint64_t data_t ;     // avoid including defs header
+// avoid including defs header
+
+#ifndef DATA_DEF
+#define DATA_DEF
+
+typedef uint64_t data_t ;  // raw data chunk
+
+// struct to hold data chunk ptr and size
+
+typedef struct data_info {
+	data_t ptr ;
+	natural_t size ;
+} data_info_t;
+
+#endif
+
 
 class SaveClientHandler {
 
@@ -41,7 +56,7 @@ public :
 	 *
 	 * synchronous (with timeout)
 	 */
-	data_t receive() ;
+	data_info_t receive() ;
 
 } ;
 

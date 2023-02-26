@@ -6,9 +6,13 @@
 #include <mach/thread_act.h>
 #include <mach/semaphore.h>
 // for testings within main
+
+
+
 #include <unistd.h>
 #include "SaveClientHandler.h"
 #include "SaveServiceDefinitions.h"
+// #include "ClientServerAPI.cpp"
 #include "DataTable.h" // designated hash table class
 
 #include <pthread.h>
@@ -114,7 +118,7 @@ void SaveServer::runServer() {
 	mach_msg_return_t mr =
 			mach_msg((mach_msg_header_t*)msg, MACH_RCV_MSG | MACH_RCV_TIMEOUT ,0, //receive with timeout | MACH_RCV_TIMEOUT, 0,
 			sizeof(data_packet_t)+10, ss_port, timeout , MACH_PORT_NULL) ;  // MACH_MSG_TIMEOUT_NONE
- 	cout << "message receive (with " << timeout << " sec timeout) result : " << mr << endl ;
+ 	cout << "server message receive (with " << timeout << " ms timeout) result : " << mr << endl ;
 	if (mr != MACH_MSG_SUCCESS) {
 		cout << "server timeout "  << timeout << " seconds on msg queue " << endl ;
 		continue ;
@@ -158,23 +162,23 @@ void SaveServer::runServer() {
 	void* SaveServer::sender(void* sargs_ptr) {
 
 		if (sargs_ptr == NULL) return NULL ; // pass
-		simple_packet_t *rec_msg = (simple_packet_t*)&((sargs_t*)sargs_ptr)->msg ;
-		SaveServer *server = (SaveServer*)&((sargs_t*)sargs_ptr)->server ;
+		simple_packet_t *rec_msg = (simple_packet_t*)(((sargs_t*)sargs_ptr)->msg) ;
+		SaveServer *server = ((sargs_t*)sargs_ptr)->server ;
 		int pid  = rec_msg->body.pid ;  // ss_msg_body_t
-		data_t data = server->dHash.getData(pid) ;
+		data_info_t data = server->dHash.getData(pid) ;
 		//send relevant data
-		cout << " in sender thread " << endl ;
-
-		if (data != NULL) {   // saved data exist for the particular client task
+		if (data.ptr != NULL) {   // saved data exist for the particular client task
 			data_packet_t *reply_msg = (data_packet_t*) malloc(sizeof(data_packet_t)) ;
 			reply_msg = server->getBuiltDataPacket(rec_msg->header.msgh_remote_port) ; // TODO check if its that ? review header ...
+			reply_msg->data.address = data.ptr ;
+		    reply_msg->data.size = data.size ;
 			// APLLY TIMEOUT ASPECTS ON HEADER ?
 			mach_msg_return_t mr = mach_msg(
 					(mach_msg_header_t*)reply_msg,MACH_SEND_MSG,
-					 sizeof(data_packet_t),/*0 on sending */0, 					MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
-			printf("mach_msg_ret value for sending data to client pid %d : 			%d ", pid, mr) ;
+					 sizeof(data_packet_t),/*0 on sending */0, MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
+			printf("mach_msg_ret value for sending data to client pid %d : %d \n", pid, mr) ;
 		}
-		else cout << "NO data saved for the requesting client process " << pid 			<< endl ;
+		else cout << "NO data saved for the requesting client process " << pid 	<< (char*)data.ptr << endl ;
 		// cout << didnt send data message + details
 		free(rec_msg) ;
 //		free(reply_msg) ??? should check if needed by kernel
@@ -190,13 +194,13 @@ void SaveServer::runServer() {
 		if (msg->data.size > MAX_CHUNK_SIZE) {   // verify data size limit
 			free(msg) ;
 			free(sargs_ptr) ; // heap allocated
-			cout << "client process " << pid << " message's data too big, can 			not save" << endl ;
+			cout << "client process " << pid << " message's data too big, can not save" << endl ;
 			return NULL ;  // pass
 		}
 
-		// OOL desc, in case of a resent data former physical mapping should 		   hold while a new virtual pointer is given ?
+		// OOL desc, in case of a resent data former physical mapping should hold while a new virtual pointer is given ?
 		// COPY ON WRITE OF A SHEM REGION by client mach msg header settings
-		server->dHash.updateData(pid, msg->data.address) ;
+		server->dHash.updateData(pid, msg->data.address,msg->data.size) ;
 		cout << "server saved successfully data from client process " <<
 				msg->body.pid <<
 						", size of saved data : " << msg->data.size << endl ;
@@ -263,7 +267,6 @@ int SaveServer::processMessage(void* mach_msg, short op) {
 	int err = 0  ; // also return value
 
 	sargs_t& args = *((sargs_t*)malloc(sizeof(sargs_t))) ;
-//	sargs_t args ;
 	args.server = this ;
 	args.msg = mach_msg ;
 
@@ -273,8 +276,7 @@ int SaveServer::processMessage(void* mach_msg, short op) {
 	if (err == 0)
 		err = pthread_create(&threads[nextThread], NULL, func_op, &args);
 	nextThread = (nextThread + 1) % maxNumOfThreads ;
-	return err ;
-}
+	return err ;}
 
 // MAIN TEST FUNCTION FOR SAVE SERVICE SYS
 
@@ -287,8 +289,6 @@ int main(int argc, char** argv) {
 
 		SaveServer ss = SaveServer(true) ;
 		cout << "server registered " << endl ;
-
-		// try to run threads
 
 		ss.runServer() ;
 
@@ -306,20 +306,22 @@ int main(int argc, char** argv) {
 			cout << "client of process " << pid << " initialization" << endl ;
 			SaveClientHandler sc = SaveClientHandler("com.apple.save_service") ;
 			cout << "new client from process " << pid << " initialized successfully"<<  endl;
-			if (sc.send((data_t)"test", 4) == true)
+			char* input = new char[MAX_CHUNK_SIZE] ;  // data to be saved
+			sprintf(input,"client of process %d test data", pid) ;
+			if (sc.send((data_t)input, strlen(input)+1) == true)
 				cout << "client process " << pid <<
 				" sent request to save data successfully" << endl ;
 			sleep(2) ;
-			data_t data = sc.receive() ;
-			cout << "data pointer : "  <<  data << endl ;
-			// request saved data
-			if (sc.send((data_t)"test", 4) == true)
-				cout << "client with task port " << mach_task_self() <<
-				" sent request to save data successfully" << endl ;
+			data_info_t data = sc.receive() ;
+			if (data.ptr != NULL) {
+				char* content = (char*)malloc(data.size+1) ;
+				memcpy((void*)content, (void*)data.ptr, data.size) ;
+				content[data.size] = '\0' ;
+				printf("recieved data chunk ptr %p, received data content : \n%s\n ", data.ptr, content ) ;
+			}
 
 			f = fork() ;
 		}
-//		while(true) {cout << "off communication client process " << getpid() << endl ;  sleep (3) ;} ;
 	}
 	return 0 ;
 } ;

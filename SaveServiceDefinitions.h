@@ -1,13 +1,26 @@
 #include <mach/message.h>
 #include <mach/task.h>
 
+
 #ifndef SAVE_SERVIC_DEFINITIONS_H
 #define SAVE_SERVIC_DEFINITIONS_H
 
 
 #define MAX_CHUNK_SIZE 1024
 
+#ifndef DATA_DEF
+#define DATA_DEF
+
 typedef uint64_t data_t ;  // raw data chunk
+
+// struct to hold data chunk ptr and size
+
+typedef struct data_info {
+	data_t ptr ;
+	natural_t size ;
+} data_info_t;
+
+#endif
 
 // describe op type for a sent message and owner process
 

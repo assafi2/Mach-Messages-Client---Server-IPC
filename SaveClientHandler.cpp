@@ -14,6 +14,7 @@
 #include "Client.h"
 #include "SaveClientHandler.h"
 #include "SaveServiceDefinitions.h" // structs definitions etc ...
+//#include "ClientServerAPI.cpp"
 #include <string.h>
 
 
@@ -109,7 +110,8 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 			return mr == MACH_MSG_SUCCESS ;
 		}
 
-		data_t receive() {
+		data_info_t receive() {
+
 			// asking server for saved data
 			getBuiltSimplePack() ;
 			pid_for_task (cur_task, &(this->receive_packet->body.pid)) ;
@@ -119,26 +121,35 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 					 sizeof(simple_packet_t),/*0 on sending */0, MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
 			cout << "client process " << cur_pid  << " sent receive request return value   " << mr << endl ;
 			// receiving ...
+			data_info_t ret_data ;
+			memset(&ret_data,0,sizeof(data_info_t)) ;
 			buildReplyPack() ;
 			mr = mach_msg(
 					(mach_msg_header_t*)reply_packet, MACH_RCV_MSG | MACH_RCV_TIMEOUT ,0, //receive with timeout | MACH_RCV_TIMEOUT, 0,
 					sizeof(data_packet_t)+10, reply_port, 10000 , MACH_PORT_NULL) ;  // MACH_MSG_TIMEOUT_NONE
 			cout << "Client message receive (with 10 sec timeout) reply result : " << mr << endl ;
-			if ( mr != MACH_MSG_SUCCESS) return NULL;
+			if (mr != MACH_MSG_SUCCESS) return ret_data ; // empty data
 			// verify data - in case size are equal ->
 			// support possible big chunks
+			cout << "reply packet dsize : " << reply_packet->data.size << endl ;
 			unsigned long int dsize = reply_packet->data.size ;  // virtual range size
-			if (reply_packet->data.size != save_packet->data.size) return NULL ;
-			vm_address_t data_old = save_packet->data.address ; // start addresses
+			if ((reply_packet->data.size != save_packet->data.size) || (reply_packet->data.address == NULL))
+					return ret_data ; // empty data struct
+     		vm_address_t data_old = save_packet->data.address ; // start addresses
 			vm_address_t data_new = reply_packet->data.address ;
-			// fragment memory region for effective comparison (physi addresses at the start of corresponding segments)
+/*			// fragment memory region for effective comparison (physi addresses at the start of corresponding segments)
 		    // get virtual page size (support big)
 			host_name_port_t host = mach_host_self() ;
 			unsigned long int page_size ;
 			// could not retrieve host page size, in that case we can provide small size >= 512 (worst case)
 			if (host_page_size(host, &page_size) != KERN_SUCCESS) return page_size = 521 ;
-			// BYTE COMPARE INSTEAD
-			if (memcmp((void*)data_old,(void*)data_new,dsize) == 0) return data_new ;
+*/			// BYTE COMPARE INSTEAD
+			if (memcmp((void*)data_old,(void*)data_new,dsize) == 0){ // fill returned data content
+				ret_data.ptr = data_new ;
+				ret_data.size = dsize ;
+			}
+
+			return ret_data ;
 		}
 
   	  public:
@@ -200,7 +211,7 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 		return client->send(data,size) ;
 	}
 
-	data_t SaveClientHandler::receive() {
+	data_info_t SaveClientHandler::receive() {
 		return client->receive() ;
 	}
 

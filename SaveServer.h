@@ -34,7 +34,6 @@ class SaveServer {
 
 
 
-
 	// static functions
 	static void* receiver(void *sargs_ptr) ;
 	static void* sender(void *sargs_ptr) ;
