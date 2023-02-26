@@ -1,6 +1,6 @@
 # Mach-Messages-Client---Server-IPC
 
-semi finished - need to catch some bugs .	
+semi finished	
 
 ----------------------------------------------------------------------------------
 
@@ -22,13 +22,15 @@ Server functionalities :
 
 - visible as a system service to other processes (com.apple.save_service) 
 
-- constantly  receiving (serving) client requests
+- constantly receiving (serving) client requests
 
 - delete a client process saved data in case of its termination both normal and due to crash   
 
 - serve multiple client requests concurrently (not blocked by a single client)     
 
 - support copy on write optimizations for clients data  
+
+- effective concurrency in aspects of shared data manipulation by multiple threads  
 
 
 
