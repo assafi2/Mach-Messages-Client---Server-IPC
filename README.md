@@ -22,7 +22,7 @@ Server functionalities :
 
 - visible as a system service to other processes (com.apple.save_service) 
 
-- constantly receiving (serving) clients requests   
+- constantly receiving (serving) client requests   
 
 - delete a client process saved data in case of its termination both normal and due to crash   
 
