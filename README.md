@@ -22,7 +22,7 @@ Server functionalities :
 
 - visible as a system service to other processes (com.apple.save_service) 
 
-- constantly receiving (serving) client requests
+- constantly receiving (serving) client requests, save / send data up to predfiend size limit per chunk   
 
 - delete a client process saved data in case of its termination both normal and due to crash   
 
@@ -30,7 +30,7 @@ Server functionalities :
 
 - support copy on write optimizations for clients data  
 
-- effective concurrency in aspects of shared data manipulation by multiple threads  
+- effective shared data access by multiple threads to improve concurrency  
 
 
 
