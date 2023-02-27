@@ -243,7 +243,7 @@ void SaveServer::runServer() {
 /*
  process the mach msg with a sender / receiver / cleaner new thread
  return 0 for success otherwise return error num (EAGAIN,EDADLK,EINVAL,ESRCH,EPERM)
- while error result on creating or trying to execute the thread (with pthread_join)
+ while error result on creating or waiting a thread (with pthread_join)
  or EDOM for bad op arg
 */
 
