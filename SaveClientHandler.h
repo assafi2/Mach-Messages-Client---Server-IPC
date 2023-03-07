@@ -5,7 +5,7 @@
  * results in separate compilation
  *
  * we assume client dont make a subsequent send(data) op in case it did a receive op
- * which hasn't been completed (e.g. verified incoming data) yet
+ * which hasn't been completed (i.e. verified incoming data) yet
  * otherwise receive op can result in mismatched data
  * TODO apply with locks
  */
