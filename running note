@@ -2,5 +2,5 @@
 
 mach_msg() return codes (printed) within test main function defined and explained in mach/message.h
 
-0 = MACH_MESSAGE_SUCCESS 
+0 = MACH_MSG_SUCCESS 
 ...   
