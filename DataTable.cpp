@@ -103,7 +103,7 @@
 		// IRELEVENT
 		// for retrieving info on a specific thread
 		// list of threads as an array of mach_pot_t, limited to hold 30 elem
-//	        thread_act_port_array_t tlist = (thread_act_t*)calloc(30,sizeof(mach_port_t)) ;
+//	    thread_act_port_array_t tlist = (thread_act_t*)calloc(30,sizeof(mach_port_t)) ;
 //		mach_msg_type_number_t tcount ; // threads count
 
 		mach_port_t task_port = 0 ;  // task related to a process holding data in an entry
