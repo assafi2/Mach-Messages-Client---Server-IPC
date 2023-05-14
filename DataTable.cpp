@@ -99,10 +99,14 @@
 
 	void DataTable::collect() {
 
+
+		// IRELEVENT
 		// for retrieving info on a specific thread
 		// list of threads as an array of mach_pot_t, limited to hold 30 elem
-	    thread_act_port_array_t tlist = (thread_act_t*)calloc(30,sizeof(mach_port_t)) ;
-		mach_msg_type_number_t tcount ; // threads count
+//	        thread_act_port_array_t tlist = (thread_act_t*)calloc(30,sizeof(mach_port_t)) ;
+//		mach_msg_type_number_t tcount ; // threads count
+
+		mach_port_t task_port = 0 ;  // task related to a process holding data in an entry
 
 		for (int i = 0 ; i < size ; ++i){
 
@@ -111,24 +115,31 @@
 			// traverse
 			if (first == NULL) continue  ;
 			do {
-	/* logic to check if process is alive - SHOULD BE REWRITTEN
-				if (task_threads(entry->task,&tlist,&tcount) == KERN_SUCCESS) {
-					cout << "task " << entry->task << " has total of " << tcount << " threads" << endl ;
-					if (tcount == 0 ) {  // task dead acquire lock on data entry
-	*/  /* action to take place in case process is dead
-		 				semaphore_wait(entry->lock) ;   // can not call semaphore wait not compiling any reason ?!
-						if (entry->data != NULL) {
-							free((void*)(entry->data)) ;
-							entry->data = NULL ;
-						}
-						semaphore_signal(entry->lock) ;
-						}
+
+
+				task_for_pid(mach_task_self(), entry->pid , &task_port) ;
+				// delete data in case of a dead process
+				if (task_port == 0) { 	// process dead acquire lock on data entry
+	//				cout << "collecting entry of dead process  : " << entry->pid << endl ;
+					semaphore_wait(entry->lock) ;
+	//				cout << "data ptr value of a collected entry : " << entry->data << endl ;
+					if (entry->data != NULL) { // delete
+		// entry cleaning logic not working properly SKIPPED for now
+		// (otherwise can crush server) NO ENTRY CLEANING LOGIC APPLIED
+
+                //			        free((void*)(entry->data)) ;
+
+		//				cout << "in collect delete data, data ptr :" << entry->data << endl ;  // debug purpose
+
+		//				entry->data = 0 ;
 					}
+					semaphore_signal(entry->lock) ;
+
+				}
 					entry = entry->forward_entry ;
-*/
-				 } while(entry!=first) ;
+
+			} while(entry!=first) ;
 		}
-		 free(tlist) ;
 	}
 
 	// return the chain entry (within a bucket) of a specific process or null if not exist
