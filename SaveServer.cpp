@@ -89,14 +89,17 @@ SaveServer::SaveServer(bool manual) : dHash(*(new DataTable(TABLE_SIZE))) {
 
 	// run collector as thread
 
-//	int err = pthread_create(&collectorThread, NULL, &collector, (void*)this);
-/*
-	if (err==0) {
+	cout << "this ptr from within constructor " << this << endl ;
 
-	//	err = pthread_join(collectorThread,NULL) ;
+	int err = pthread_create(&collectorThread, NULL, &collector, (void*)this);
+
+	if (err!=0) {
+
+		cerr << "could not run collector thread, terminating service " << endl ;
+
+		exit(1);
+
 	}
-	else cerr << "could not run collector thread " << endl ;
-*/
 }
 
 // should consist main dispatch loop
@@ -113,7 +116,7 @@ void SaveServer::runServer() {
 
 	int timeout = 5000 ;
 	// allocate incoming message buffer - big enough for both complex and simple messages
-	void* msg  = malloc(sizeof(data_packet_t)) ;
+	void* msg  = malloc(sizeof(data_packet_t) + 10) ;
 	// message receiving with timeout for non blocking the whole task ...
 	mach_msg_return_t mr =
 			mach_msg((mach_msg_header_t*)msg, MACH_RCV_MSG | MACH_RCV_TIMEOUT ,0, //receive with timeout | MACH_RCV_TIMEOUT, 0,
@@ -228,14 +231,16 @@ void SaveServer::runServer() {
 	return NULL ; // unconsidered val
 }
 
-	// continuously running DataTable collect method to delete client tasks garbage
+	// continuously running DataTable collect method to delete client processes garbage
 
 	void* SaveServer::collector(void* server) {
 
 		{
-			SaveServer *server = (SaveServer*)server ;
-			while ((server->running)) {
-				server->dHash.collect() ;
+
+			SaveServer *cast_server = (SaveServer*)server ; // prevent var names collision
+			while (cast_server->running) {
+				sleep(3) ;
+				cast_server->dHash.collect() ;
 			}
 			return NULL  ;
 		}
@@ -243,7 +248,7 @@ void SaveServer::runServer() {
 /*
  process the mach msg with a sender / receiver / cleaner new thread
  return 0 for success otherwise return error num (EAGAIN,EDADLK,EINVAL,ESRCH,EPERM)
- while error result on creating or waiting a thread (with pthread_join)
+ while error result on creating or trying to execute the thread (with pthread_join)
  or EDOM for bad op arg
 */
 
