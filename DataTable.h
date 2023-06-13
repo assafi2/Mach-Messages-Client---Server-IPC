@@ -35,17 +35,37 @@ class DataTable {
 		struct chain_entry* backward_entry ;
 		struct chain_entry* forward_entry ;
 		int pid ;
-		semaphore_t lock ;
+		int count ; // count the number of currently visiting threads
+		semaphore_t d_lock ; // content (data ptr) RW lock
+		semaphore_t f_lock ; // forward_entry ptr lock
+		semaphore_t count_lock ; // lock for counter field
+		// 0 credit initialized semaphore like to get posted (up) by the before last
+		// visiting thread while the a deleting thread is waiting on it
+		semaphore_t count_sem ;
 		data_t data ;
 		natural_t d_size ; // data size
-		mach_port_t* portlists ; // a buffer for dynamic arrays retrieving as part getting info on specific task
+		bool deletion ; // indicate entry is under deletion
+//		mach_port_t* portlists ; // a buffer for dynamic arrays retrieving as part getting info on specific task - OMMITED
+/*
+		// inline constructor
+		chain_entry (struct chain_entry_t* back_ent, struct chain_entry_t* for_ent, int pidd,
+					 data_t dataa, natural_t d_sizee) : backward_entry(back_ent), forward_entry(for_ent),
+					 pid(pidd), count(0), data(dataa), d_size(d_sizee), deletion(false) {
+			semaphore_create(cur_task,&(d_lock), SYNC_POLICY_FIFO, 1) ;
+			semaphore_create(cur_task,&(f_lock), SYNC_POLICY_FIFO, 1) ;
+			semaphore_create(cur_task,&(count_lock), SYNC_POLICY_FIFO, 1) ;
+			// designated for a deleting thread to wait on until
+			// get posted by the last non deleting thread
+			semaphore_create(cur_task,&(count_sem), SYNC_POLICY_FIFO, 0) ;
+		}
+*/
 	} chain_entry_t ;
 
 	// bucket data structure
 
 	typedef struct bucket {
 		chain_entry_t* chain ;
-		semaphore_t addlock ;  // lock for adding new entry on specific bucket chain
+		semaphore_t up_lock ; // lock for updating (adding/deleting) new/existing entry on specific bucket chain
 	} bucket_t ;
 
 	bucket_t* buckets ; // inline array of buckets
@@ -54,7 +74,6 @@ class DataTable {
 public :
 
  	int size ; // number of buckets
-
 
  	DataTable() ;
 
@@ -76,18 +95,24 @@ public :
 
 	bool deleteData(int pid) ;
 
+
 	void collect() ;
 
 
 private :
 
+
 	// return the chain entry (within a bucket) of a specific process or null if not exist
+
+	// caller should apply relevant count decrementing logic (optional positing)
+	// on the returned entry if not null
+
 	chain_entry_t* find(int pid) ;
 
+	bool deleteEntry(chain_entry_t* entry) ;
+
+
 } ;
-
-
-
 
 
 #endif /* DATATABLE_H_ */
