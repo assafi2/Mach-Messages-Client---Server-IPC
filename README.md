@@ -30,7 +30,7 @@ Server functionalities :
 
 - support copy on write optimizations for clients data  
 
-- effective shared data access by multiple threads to improve concurrency  
+- effective shared data access (CRUD ops) by multiple threads to improve concurrency  
 
 
 
