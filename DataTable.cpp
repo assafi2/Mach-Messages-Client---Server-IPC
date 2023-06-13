@@ -9,7 +9,7 @@
 		cur_task = mach_task_self() ;
 		// init bucket sems / chains
 		for (int i = 0 ; i < size ; ++i) {
-			semaphore_create(cur_task,&(buckets[i].addlock), SYNC_POLICY_FIFO, 1) ;
+			semaphore_create(cur_task,&(buckets[i].up_lock), SYNC_POLICY_FIFO, 1) ;
 			buckets[i].chain = NULL ;
 		}
 	}
@@ -30,11 +30,18 @@
 		if (entry == NULL) {
 			return retData ; // d_size field value garbage
 		}
-		semaphore_wait(entry->lock) ;
+		semaphore_wait(entry->d_lock) ;
 		retData.ptr = entry->data ; // NULL in case of outdated / invalid data
 		retData.size = entry->d_size ;
-		semaphore_signal(entry->lock) ;
-
+		semaphore_signal(entry->d_lock) ;
+		// get out of the entry - decrement count
+		semaphore_wait(entry->count_lock) ;
+		entry->count-- ;
+		if ((entry->count == 1) and (entry->deletion)) {
+			semaphore_signal(entry->count_sem) ; // wake up the deleting thread
+		}
+		semaphore_signal(entry->count_lock) ;
+		// a deleting thread should acquire count_lock before do the actual free()
 		return retData ;
 	}
 	// add / update (in case entry exist) data for given process
@@ -42,21 +49,37 @@
 
 		chain_entry_t *entry = find(pid) ;
 		if (entry != NULL) {
-			semaphore_wait(entry->lock) ;
+			semaphore_wait(entry->d_lock) ;
 			entry->data = data ;
 			entry->d_size = d_size ;
-    		semaphore_signal(entry->lock) ;
-			return ;
+    		semaphore_signal(entry->d_lock) ;
+    		semaphore_wait(entry->count_lock) ;
+    		entry->count-- ;
+    		if ((entry->count == 1) and (entry->deletion)) {
+    			semaphore_signal(entry->count_sem) ; // wake up the deleting thread
+    		}
+    		semaphore_signal(entry->count_lock) ;
+    		// a deleting thread should acquire count_lock before do the actual free()
+    		return ;
 		}
-		// acquire bucket's addlock
+		// acquire bucket's update lock (i.e. add / delete a chain entry)
 		bucket_t* b = &(buckets[pid % size]) ;
-		semaphore_wait(b->addlock) ;
+		semaphore_wait(b->up_lock) ;
 		// new entry
+
+		// initialization without constructor
+
 		chain_entry_t *newEntry = (chain_entry_t*) malloc(sizeof(chain_entry_t)) ;
 		newEntry->data = data ;
 		newEntry->pid = pid ;
 		newEntry->d_size = d_size ;
-		semaphore_create(cur_task,&(newEntry->lock), SYNC_POLICY_FIFO, 1) ;
+		newEntry->deletion = false ;
+		semaphore_create(cur_task,&(newEntry->d_lock), SYNC_POLICY_FIFO, 1) ;
+		semaphore_create(cur_task,&(newEntry->f_lock), SYNC_POLICY_FIFO, 1) ;
+		semaphore_create(cur_task,&(newEntry->count_lock), SYNC_POLICY_FIFO, 1) ;
+		// designated for a deleting thread to wait on until
+		// get posted by the last non deleting thread
+		semaphore_create(cur_task,&(newEntry->count_sem), SYNC_POLICY_FIFO, 0) ;
 
 		// add logic
 		if (b->chain == NULL)
@@ -72,8 +95,7 @@
 			b->chain->backward_entry = newEntry ;
 			b->chain->backward_entry->forward_entry = newEntry ; // after pointing to new entry
 		}
-		semaphore_signal(b->addlock) ;
-
+		semaphore_signal(b->up_lock) ;
 		return ;
 	}
 
@@ -82,67 +104,82 @@
 
 		chain_entry_t *entry = find(pid) ;
 		if (entry == NULL) return false ;
-		semaphore_wait(entry->lock) ;
-		if (entry->data != NULL) {
-			free((void*)(entry->data)) ;
-			entry->data = NULL ;
-		}
-		semaphore_signal(entry->lock) ;
+		deleteEntry(entry) ;
 		return true ;
+	}
+
+	bool DataTable::deleteEntry(chain_entry_t* entry) {
+
+	if (entry->deletion == true) return false ;  // entry already under deletion - return
+	// acquire relevant bucket update lock
+	bucket_t* b = &(buckets[entry->pid % size]) ;
+	semaphore_wait(b->up_lock) ;
+	// turn on (under) deletion flag
+	entry->deletion == true ;
+	// disable progress towards the "to be deleted" entry by other threads
+	semaphore_wait(entry->backward_entry->f_lock) ;
+	semaphore_wait(entry->count_lock) ; // acquire sync access to count var
+	// remove entry from chain without interrupting currently visiting threads from progress
+	entry->backward_entry->forward_entry = entry->forward_entry ;
+	entry->forward_entry->backward_entry = entry->backward_entry ;
+	semaphore_signal(entry->backward_entry->f_lock) ; // enable progress from previous entry
+	if (entry->count > 1) { // other threads currently visiting this entry - can not deallocate
+		// down on count sem, will be notified when
+		// the last other thread progress from the entry
+		semaphore_wait(entry->count_sem) ;   // might be done with some other technique to prevent potential starvation
+	}
+	// destruction logic - could be done as well with a proper destructor method
+	semaphore_destroy(cur_task,entry->count_lock) ;
+	semaphore_destroy(cur_task,entry->d_lock) ;
+	semaphore_destroy(cur_task,entry->f_lock) ;
+	semaphore_destroy(cur_task,entry->count_sem) ;
+	// free client process data chunk
+	// NOT WORKING AGAINST (INCOMING) MACH MESSAGE "ALOCCATED" OUT OF LINE DATA CHUNK - temporary omitted
+//	if (entry->data != NULL)
+//		free((void*)(entry->data)) ;
+	semaphore_signal(b->up_lock) ; // finished update (release bucket update lock)
+	return true ;
 	}
 
 
 	// garbage collect (deallocate) data of terminated processes
-	// not good collect function which keep entries of deallocated (collected) data in the chain ...
-	// this can lead to bad performance within time after termination and keep servicing of more client processes
-	// should be changed .
+	// traverse the whole structure in order to delete (remove) data (entries) of terminated processes
+	// in synchronized manner 
 
 	void DataTable::collect() {
 
-
-		// IRELEVENT
-		// for retrieving info on a specific thread
-		// list of threads as an array of mach_pot_t, limited to hold 30 elem
-//	    thread_act_port_array_t tlist = (thread_act_t*)calloc(30,sizeof(mach_port_t)) ;
-//		mach_msg_type_number_t tcount ; // threads count
-
 		mach_port_t task_port = 0 ;  // task related to a process holding data in an entry
-
+		chain_entry_t *first, *entry, *next ;
 		for (int i = 0 ; i < size ; ++i){
 
-			chain_entry_t *first = buckets[i].chain ;
-			chain_entry_t *entry = first ;
-			// traverse
+			first = buckets[i].chain ;
 			if (first == NULL) continue  ;
+			// traverse
+			entry = first ;
+			next = NULL ;
+			// inc entry visit counter
+			semaphore_wait(entry->count_lock) ;
+			entry->count++ ;
+			semaphore_signal(entry->count_lock) ;
 			do {
-
-
 				task_for_pid(mach_task_self(), entry->pid , &task_port) ;
-				// delete data in case of a dead process
-				if (task_port == 0) { 	// process dead acquire lock on data entry
-	//				cout << "collecting entry of dead process  : " << entry->pid << endl ;
-					semaphore_wait(entry->lock) ;
-	//				cout << "data ptr value of a collected entry : " << entry->data << endl ;
-					if (entry->data != NULL) { // delete
-		// entry cleaning logic not working properly SKIPPED for now
-		// (otherwise can crush server) NO ENTRY CLEANING LOGIC APPLIED
-
-                //			        free((void*)(entry->data)) ;
-
-		//				cout << "in collect delete data, data ptr :" << entry->data << endl ;  // debug purpose
-
-		//				entry->data = 0 ;
-					}
-					semaphore_signal(entry->lock) ;
-
+				// delete entry in case of a dead process (unless under deletion)
+				if (task_port == 0) { 	// process dead
+					deleteEntry(entry) ;
 				}
-					entry = entry->forward_entry ;
-
+				semaphore_wait(entry->f_lock) ;
+				next = entry->forward_entry ;
+				semaphore_signal(entry->f_lock) ;
+				entry = next ;
 			} while(entry!=first) ;
 		}
 	}
 
 	// return the chain entry (within a bucket) of a specific process or null if not exist
+
+	// caller should apply relevant count decrementing logic (optional positing)
+	// on the returned entry if not null
+
 	DataTable::chain_entry_t* DataTable::find(int pid) {
 
 		chain_entry_t *first = buckets[pid % size].chain ;
@@ -150,13 +187,27 @@
 		// traverse
 		if (first == NULL) return NULL ;
 		chain_entry_t *entry = first ;
+		chain_entry_t *next = NULL ;
 		do {
+			// inc entry visit counter
+			semaphore_wait(entry->count_lock) ;
+			entry->count++ ;
+			semaphore_signal(entry->count_lock) ;
 			if (entry->pid == pid) {
 				return entry ;
 			}
-			entry = entry->forward_entry ;
+
+			semaphore_wait(entry->f_lock) ; // provide mutual exclusion on accessing the entry farward_entry ptr ;
+			next = entry->forward_entry ;
+			semaphore_signal(entry->f_lock) ;
+			semaphore_wait(entry->count_lock) ;
+			entry->count-- ;
+			if ((entry->count == 1) and (entry->deletion)) {
+				semaphore_signal(entry->count_sem) ; // wake up the deleting thread
+			}
+			semaphore_signal(entry->count_lock) ; // a deleting thread should acquire count_lock before do the actual free()
+			entry = next ;
+
 		} while(entry!=first) ;
 		 return NULL ;
 	}
-
-
