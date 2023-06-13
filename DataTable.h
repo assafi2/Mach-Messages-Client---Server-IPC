@@ -21,9 +21,14 @@ using namespace std ;
  /*
  * Hash table to hold data entries
  * table will contain fixed number of buckets and resolve collisions with chaining
- * do not support dynamic number of buckets
+ * does not support dynamic number of buckets
  * a client process can have at most 1 data entry in the table, processes pids are the table keys
  */
+
+// as mentioned
+// not support dynamic hashing i.e. resizing of hash table enteries number (number of buckets) according to current capicity  
+// works ok because of assumable limited number of client processes relative to max number of processes in the machine (OS) 
+
 
 #define TABLE_SIZE 30
 
