@@ -26,7 +26,7 @@ using namespace std ;
  */
 
 // as mentioned
-// not support dynamic hashing i.e. resizing of hash table enteries number (number of buckets) according to current capicity  
+// not support dynamic hashing i.e. resizing of hash table entries number (number of buckets) according to current capacity  
 // works ok because of assumable limited number of client processes relative to max number of processes in the machine (OS) 
 
 
