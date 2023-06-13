@@ -22,7 +22,7 @@ using namespace std ;
  * Hash table to hold data entries
  * table will contain fixed number of buckets and resolve collisions with chaining
  * do not support dynamic number of buckets
- * a task can have at most 1 data entry in the table, tasks ports (task_t) are the table keys
+ * a client process can have at most 1 data entry in the table, processes pids are the table keys
  */
 
 #define TABLE_SIZE 30
