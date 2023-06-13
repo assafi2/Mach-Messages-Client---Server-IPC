@@ -5,11 +5,10 @@
 #include <mach/port.h>
 #include <mach/thread_act.h>
 #include <mach/semaphore.h>
+
 // for testings within main
-
-
-
 #include <unistd.h>
+
 #include "SaveClientHandler.h"
 #include "SaveServiceDefinitions.h"
 // #include "ClientServerAPI.cpp"
@@ -85,19 +84,14 @@ SaveServer::SaveServer(bool manual) : dHash(*(new DataTable(TABLE_SIZE))) {
 
 	cout << "save_service mach port #  : " << ss_port << endl ;
 
-
-
 	// run collector as thread
-
-	cout << "this ptr from within constructor " << this << endl ;
-
 	int err = pthread_create(&collectorThread, NULL, &collector, (void*)this);
 
 	if (err!=0) {
 
-		cerr << "could not run collector thread, terminating service " << endl ;
+	cerr << "could not run collector thread, terminating service " << endl ;
 
-		exit(1);
+	exit(1);
 
 	}
 }
