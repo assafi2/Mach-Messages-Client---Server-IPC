@@ -31,8 +31,6 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 // overloaded for construction with manual registration
 /*
 SaveServer::SaveServer() : dHash(*(DataTable*)NULL) {
-
-
 	SaveServer(true) ;
 }
 */
@@ -175,8 +173,8 @@ void SaveServer::runServer() {
 					 sizeof(data_packet_t),/*0 on sending */0, MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
 			printf("mach_msg_ret value for sending data to client pid %d : %d \n", pid, mr) ;
 		}
-		else cout << "NO data saved for the requesting client process " << pid 	<< (char*)data.ptr << endl ;
-		// cout << didnt send data message + details
+		else
+			cout << "NO data saved for the requesting client process " << pid << endl ;
 		free(rec_msg) ;
 //		free(reply_msg) ??? should check if needed by kernel
 		return NULL ; // unconsidered val
