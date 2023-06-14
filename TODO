@@ -1,2 +1,2 @@
 work out termination messages communication,
-verify / rewrite dead proccess checking logic (by pid) within DataTable::collect() method
+verify / rewrite dead process checking logic (by pid) within DataTable::collect() method
