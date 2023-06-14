@@ -1,2 +1,2 @@
 work out termination messages communication,
-corner cases with data table deletions 
+verify / rewrite dead proccess checking logic (by pid) within DataTable::collect() method
