@@ -1,5 +1,6 @@
 #include "DataTable.h"
 #include <math.h>
+#include <signal.h> // instead of using possibly unsupported by default function task_for_pid
 
 
 	DataTable::DataTable(int size) {
@@ -10,6 +11,7 @@
 		// init bucket sems / chains
 		for (int i = 0 ; i < size ; ++i) {
 			semaphore_create(cur_task,&(buckets[i].up_lock), SYNC_POLICY_FIFO, 1) ;
+			semaphore_create(cur_task,&(buckets[i].chain_lock), SYNC_POLICY_FIFO, 1) ;
 			buckets[i].chain = NULL ;
 		}
 	}
@@ -110,20 +112,42 @@
 
 	bool DataTable::deleteEntry(chain_entry_t* entry) {
 
-	if (entry->deletion == true) return false ;  // entry already under deletion - return
+	if (entry->deletion == true) {
+		return false ;  // entry already under deletion - return
+	}
 	// acquire relevant bucket update lock
 	bucket_t* b = &(buckets[entry->pid % size]) ;
 	semaphore_wait(b->up_lock) ;
 	// turn on (under) deletion flag
-	entry->deletion == true ;
-	// disable progress towards the "to be deleted" entry by other threads
-	semaphore_wait(entry->backward_entry->f_lock) ;
+	entry->deletion = true ;
+	// unique delete logic to be applied in case its a ONE entry chain
+	if ((entry->forward_entry) == entry) {
+		// acquire bucket chain lock for disabling threads enter into the chain
+		semaphore_wait(b->chain_lock) ;
+		b->chain = NULL ;
+		semaphore_signal(b->chain_lock) ;
+	}
+	else { // chain holds at list two entries
+		// disable progress towards the "to be deleted" entry by other threads
+		semaphore_wait(entry->backward_entry->f_lock) ;
+		// same for incoming threads from the bucket in case its the first chain entry
+		if (entry == b->chain)
+			semaphore_wait(b->chain_lock) ;
+
+		// remove entry from chain without interrupting currently visiting threads from progress
+		entry->backward_entry->forward_entry = entry->forward_entry ;
+		entry->forward_entry->backward_entry = entry->backward_entry ;
+		if (entry == b->chain) // re reference chain from bucket in case first entry has been removed
+			b->chain = entry->forward_entry ;
+		semaphore_signal(entry->backward_entry->f_lock) ; // enable progress from previous entry
+		if (entry == b->chain) // same for incoming threads from bucket in case first entry has been removed
+			semaphore_signal(b->chain_lock) ;
+	}
 	semaphore_wait(entry->count_lock) ; // acquire sync access to count var
-	// remove entry from chain without interrupting currently visiting threads from progress
-	entry->backward_entry->forward_entry = entry->forward_entry ;
-	entry->forward_entry->backward_entry = entry->backward_entry ;
-	semaphore_signal(entry->backward_entry->f_lock) ; // enable progress from previous entry
 	if (entry->count > 1) { // other threads currently visiting this entry - can not deallocate
+		// can cause dead lock in case a context switch occur and all currently visiting threads
+		// left entry before current deleting thread manage to wait on count_sem - should raise a flag for this purpose
+		semaphore_signal(entry->count_lock) ;
 		// down on count sem, will be notified when
 		// the last other thread progress from the entry
 		semaphore_wait(entry->count_sem) ;   // might be done with some other technique to prevent potential starvation
@@ -138,13 +162,14 @@
 //	if (entry->data != NULL)
 //		free((void*)(entry->data)) ;
 	semaphore_signal(b->up_lock) ; // finished update (release bucket update lock)
+	free (entry) ; // free entry chunk
 	return true ;
 	}
 
 
 	// garbage collect (deallocate) data of terminated processes
 	// traverse the whole structure in order to delete (remove) data (entries) of terminated processes
-	// in synchronized manner 
+	// in synchronized manner
 
 	void DataTable::collect() {
 
@@ -152,7 +177,10 @@
 		chain_entry_t *first, *entry, *next ;
 		for (int i = 0 ; i < size ; ++i){
 
-			first = buckets[i].chain ;
+			// acquire chain lock
+			semaphore_wait(buckets[i].chain_lock) ;
+			chain_entry_t *first = buckets[i].chain ;
+			semaphore_signal(buckets[i].chain_lock) ;
 			if (first == NULL) continue  ;
 			// traverse
 			entry = first ;
@@ -162,9 +190,15 @@
 			entry->count++ ;
 			semaphore_signal(entry->count_lock) ;
 			do {
-				task_for_pid(mach_task_self(), entry->pid , &task_port) ;
+				// bad return (kern_return_t) value due to changes in modern OSs,
+				// should make configuration to allow proper usage of this func
+		//		task_for_pid(mach_task_self(), entry->pid , &task_port) ;
+
+				// instead usuing unix signals kill func to check if process pid isn't terminated
 				// delete entry in case of a dead process (unless under deletion)
-				if (task_port == 0) { 	// process dead
+				if (kill(entry->pid,0) != 0 /* task_port == 0 (?) */) { 	// process dead
+					cout << "(found) dead process num : " << entry->pid /* << " chain ptr on releveant bucket" << buckets[i%(entry->pid)].chain */ <<  endl ;
+					cout << "call delete on relevant chain entry ptr : " << entry << " (test purpose)" << endl ;
 					deleteEntry(entry) ;
 				}
 				semaphore_wait(entry->f_lock) ;
@@ -182,7 +216,11 @@
 
 	DataTable::chain_entry_t* DataTable::find(int pid) {
 
-		chain_entry_t *first = buckets[pid % size].chain ;
+		bucket *b = &(buckets[pid % size]) ;
+		// acquire chain lock
+		semaphore_wait(b->chain_lock) ;
+		chain_entry_t *first = b->chain ;
+		semaphore_signal(b->chain_lock) ;
 
 		// traverse
 		if (first == NULL) return NULL ;
