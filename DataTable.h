@@ -1,4 +1,3 @@
-
 #ifndef DATATABLE_H_
 #define DATATABLE_H_
 
@@ -17,18 +16,16 @@
 
 using namespace std ;
 
-
- /*
- * Hash table to hold data entries
- * table will contain fixed number of buckets and resolve collisions with chaining
- * does not support dynamic number of buckets
- * a client process can have at most 1 data entry in the table, processes pids are the table keys
- */
+/*
+* Hash table to hold data entries
+* table will contain fixed number of buckets and resolve collisions with chaining
+* does not support dynamic number of buckets
+* a client process can have at most 1 data entry in the table, processes pids are the table keys
+*/
 
 // as mentioned
-// not support dynamic hashing i.e. resizing of hash table entries number (number of buckets) according to current capacity  
-// works ok because of assumable limited number of client processes relative to max number of processes in the machine (OS) 
-
+// not support dynamic hashing i.e. resizing of hash table entries number (number of buckets) according to current capacity
+// works ok because of assumable limited number of client processes relative to max number of processes in the machine (OS)
 
 #define TABLE_SIZE 30
 
@@ -71,6 +68,8 @@ class DataTable {
 	typedef struct bucket {
 		chain_entry_t* chain ;
 		semaphore_t up_lock ; // lock for updating (adding/deleting) new/existing entry on specific bucket chain
+		// lock to exclude threads from visiting the first chain entry while it being critically manipulated (under deletion time)
+		semaphore_t chain_lock ;
 	} bucket_t ;
 
 	bucket_t* buckets ; // inline array of buckets
