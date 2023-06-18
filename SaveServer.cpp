@@ -112,7 +112,7 @@ void SaveServer::runServer() {
 	// message receiving with timeout for non blocking the whole task ...
 	mach_msg_return_t mr =
 			mach_msg((mach_msg_header_t*)msg, MACH_RCV_MSG | MACH_RCV_TIMEOUT ,0, //receive with timeout | MACH_RCV_TIMEOUT, 0,
-			sizeof(data_packet_t)+10, ss_port, timeout , MACH_PORT_NULL) ;  // MACH_MSG_TIMEOUT_NONE
+			2*sizeof(data_packet_t), ss_port, timeout , MACH_PORT_NULL) ;  // MACH_MSG_TIMEOUT_NONE
  	cout << "server message receive (with " << timeout << " ms timeout) result : " << mr << endl ;
 	if (mr != MACH_MSG_SUCCESS) {
 		cout << "server timeout "  << timeout << " seconds on msg queue " << endl ;
@@ -131,11 +131,9 @@ void SaveServer::runServer() {
 		processMessage(msg, DATA_SEND) ;
 	}
 	else if (((simple_packet_t*)msg)->body.type == 'd') {
-
 		processMessage(msg, DELETE) ;
 	}
 	else { //IF NON OF THE REPRESTING OP LETTRES FOUND MESSAGE DISCARDED
-
 		free(msg) ;
 //		cout << "discard message" << endl ;
 	}
@@ -206,14 +204,12 @@ void SaveServer::runServer() {
 
 	void* SaveServer::cleaner(void* sargs_ptr) {
 
-//	cout << "in cleaner code" << endl ;
 	if (sargs_ptr == NULL) return NULL ; // pass
 	simple_packet_t *simple_msg =
-			(simple_packet_t*)&((sargs_t*)sargs_ptr)->msg ;
-	SaveServer *server = (SaveServer*)&((sargs_t*)sargs_ptr)->server ;
+			(simple_packet_t*)((sargs_t*)sargs_ptr)->msg ;
+	SaveServer *server = ((sargs_t*)sargs_ptr)->server ;
 	int pid = simple_msg->body.pid ;
 	free(simple_msg) ; // free buffer after extracting directions
-	// acquire lock on map entry
 	char* ret ;
 	if (server->dHash.deleteData(pid)) {
 		ret = "successfully" ;
@@ -228,9 +224,9 @@ void SaveServer::runServer() {
 	void* SaveServer::collector(void* server) {
 
 		{
-
 			SaveServer *cast_server = (SaveServer*)server ; // prevent var names collision
 			while (cast_server->running) {
+		//		cout << "start collecting from first hash bucket " << endl ;
 				sleep(3) ;
 				cast_server->dHash.collect() ;
 			}
@@ -266,7 +262,6 @@ int SaveServer::processMessage(void* mach_msg, short op) {
 	sargs_t& args = *((sargs_t*)malloc(sizeof(sargs_t))) ;
 	args.server = this ;
 	args.msg = mach_msg ;
-
 	if (threads[nextThread] != 0 ) {  // entry for an existed thread
 		err = pthread_join(threads[nextThread],NULL) ;
 	}
@@ -282,7 +277,6 @@ int main(int argc, char** argv) {
 	int count = 6 ;
 	int f = fork() ;
 	if (f > 0) { // server
-
 
 		SaveServer ss = SaveServer(true) ;
 		cout << "server registered " << endl ;
@@ -314,7 +308,7 @@ int main(int argc, char** argv) {
 				char* content = (char*)malloc(data.size+1) ;
 				memcpy((void*)content, (void*)data.ptr, data.size) ;
 				content[data.size] = '\0' ;
-				printf("recieved data chunk ptr %p, received data content : \n%s\n ", data.ptr, content ) ;
+				printf("recieved data chunk ptr %p, received data content : \n%s\n", data.ptr, content ) ;
 			}
 
 			f = fork() ;
