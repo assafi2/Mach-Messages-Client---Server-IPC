@@ -4,3 +4,7 @@ mach_msg() return codes (printed) within test main function (SaveServer.cpp) def
 
 0 = MACH_MSG_SUCCESS 
 ...   
+
+
+
+if we disable SaveClient destructor method logic (SaveClientHandler::SaveClient::~SaveClient()) we can notice the the server's collector thread work within the test main function output ("collector thread found ... ")  
