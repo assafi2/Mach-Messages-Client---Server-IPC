@@ -44,6 +44,7 @@ class DataTable {
 		// 0 credit initialized semaphore like to get posted (up) by the before last
 		// visiting thread while the a deleting thread is waiting on it
 		semaphore_t count_sem ;
+		bool post_count_sem ; // flag to indicate a deleting thread has passed the count sem waiting
 		data_t data ;
 		natural_t d_size ; // data size
 		bool deletion ; // indicate entry is under deletion
