@@ -106,7 +106,7 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 			mach_msg_return_t mr = mach_msg(
 						(mach_msg_header_t*)save_packet,MACH_SEND_MSG,
 						 sizeof(data_packet_t),/*0 on sending */0, MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
-			cout << "client process " << cur_pid << "  sending mach return value  :  " << mr << endl ;
+			cout << "client process " << cur_pid << " sending mach return value  :  " << mr << endl ;
 			return mr == MACH_MSG_SUCCESS ;
 		}
 
@@ -182,12 +182,18 @@ extern data_packet_t* build_data_packet(data_packet_t* packet, mach_port_t reply
 		//  include termination logic in case of proper finalization
 		~SaveClient() {
 
+			int updated_cur_pid ;   // pid of the currently running process to be updated
+			pid_for_task (cur_task,&updated_cur_pid) ;
+			if (updated_cur_pid != cur_pid)
+				// current process differs from the original process which created this client instance
+				// do not apply destruction logic
+				return ;
 			// termination request from server
 			getBuiltSimplePack() ;
-			pid_for_task (cur_task,&(save_packet->body.pid)) ;
-			save_packet->body.type = 'd' ; // 'save' sending op
+			receive_packet->body.type = 'd' ; // 'save' sending op
+			receive_packet->body.pid = cur_pid ; // corresponding to the process relevant to the object
 			mach_msg_return_t mr = mach_msg(
-					(mach_msg_header_t*)save_packet,MACH_SEND_MSG,
+					(mach_msg_header_t*)receive_packet,MACH_SEND_MSG,
 					2*sizeof(simple_packet_t),/*0 on sending */0, MACH_PORT_NULL,MACH_MSG_TIMEOUT_NONE,MACH_PORT_NULL) ;
 			cout << "client of process " << cur_pid << " termination msg sent  " << mr << endl ;
 
