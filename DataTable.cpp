@@ -75,7 +75,9 @@
 		newEntry->data = data ;
 		newEntry->pid = pid ;
 		newEntry->d_size = d_size ;
+		newEntry->count = 0 ;
 		newEntry->deletion = false ;
+		newEntry->post_count_sem = false ;
 		semaphore_create(cur_task,&(newEntry->d_lock), SYNC_POLICY_FIFO, 1) ;
 		semaphore_create(cur_task,&(newEntry->f_lock), SYNC_POLICY_FIFO, 1) ;
 		semaphore_create(cur_task,&(newEntry->count_lock), SYNC_POLICY_FIFO, 1) ;
@@ -122,11 +124,13 @@
 	entry->deletion = true ;
 	// unique delete logic to be applied in case its a ONE entry chain
 	if ((entry->forward_entry) == entry) {
+	//	cout << "one entry chain" << endl ;
 		// acquire bucket chain lock for disabling threads enter into the chain
 		semaphore_wait(b->chain_lock) ;
 		b->chain = NULL ;
 		semaphore_signal(b->chain_lock) ;
 	}
+
 	else { // chain holds at list two entries
 		// disable progress towards the "to be deleted" entry by other threads
 		semaphore_wait(entry->backward_entry->f_lock) ;
@@ -150,7 +154,12 @@
 		semaphore_signal(entry->count_lock) ;
 		// down on count sem, will be notified when
 		// the last other thread progress from the entry
-		semaphore_wait(entry->count_sem) ;   // might be done with some other technique to prevent potential starvation
+		semaphore_wait(entry->count_sem) ;   // consider using the flag below (post_count_sem) to prevent potential starvation
+		entry->post_count_sem = true ; // raise flag to end a possible "busy waking up"
+		// aquire count lock to let the last thread ("busy waker") which hold this lock leave
+		semaphore_wait(entry->count_lock) ;
+				if (entry->count == 1) entry->count-- ;
+		semaphore_signal(entry->count_lock) ;
 	}
 	// destruction logic - could be done as well with a proper destructor method
 	semaphore_destroy(cur_task,entry->count_lock) ;
@@ -166,7 +175,6 @@
 	return true ;
 	}
 
-
 	// garbage collect (deallocate) data of terminated processes
 	// traverse the whole structure in order to delete (remove) data (entries) of terminated processes
 	// in synchronized manner
@@ -176,34 +184,50 @@
 		mach_port_t task_port = 0 ;  // task related to a process holding data in an entry
 		chain_entry_t *first, *entry, *next ;
 		for (int i = 0 ; i < size ; ++i){
-
 			// acquire chain lock
 			semaphore_wait(buckets[i].chain_lock) ;
 			chain_entry_t *first = buckets[i].chain ;
 			semaphore_signal(buckets[i].chain_lock) ;
 			if (first == NULL) continue  ;
+		//	cout << "bucket  # " << i << " has chain" << endl ; // test purpose
 			// traverse
 			entry = first ;
 			next = NULL ;
 			// inc entry visit counter
-			semaphore_wait(entry->count_lock) ;
-			entry->count++ ;
-			semaphore_signal(entry->count_lock) ;
 			do {
+				semaphore_wait(entry->count_lock) ;
+				entry->count++ ;
+				semaphore_signal(entry->count_lock) ;
 				// bad return (kern_return_t) value due to changes in modern OSs,
 				// should make configuration to allow proper usage of this func
 		//		task_for_pid(mach_task_self(), entry->pid , &task_port) ;
-
+		//		int pStatus  = kill(entry->pid,0) ; // testing purpose
+		//		cout << "process " << entry->pid << " kill return val : " << pStatus << endl ; // testing purpose
 				// instead usuing unix signals kill func to check if process pid isn't terminated
 				// delete entry in case of a dead process (unless under deletion)
 				if (kill(entry->pid,0) != 0 /* task_port == 0 (?) */) { 	// process dead
-					cout << "(found) dead process num : " << entry->pid /* << " chain ptr on releveant bucket" << buckets[i%(entry->pid)].chain */ <<  endl ;
-					cout << "call delete on relevant chain entry ptr : " << entry << " (test purpose)" << endl ;
+					cout << "collector thread found an invalid data entry of DEAD client process num : "
+							<< entry->pid << " to be removed" << endl ;
+					semaphore_wait(entry->f_lock) ;
+					next = entry->forward_entry ;
+					semaphore_signal(entry->f_lock) ;
 					deleteEntry(entry) ;
 				}
-				semaphore_wait(entry->f_lock) ;
-				next = entry->forward_entry ;
-				semaphore_signal(entry->f_lock) ;
+				else {
+					// exit entry logic (considering the case where the entry turned under deletion by another thread while visiting)
+					semaphore_wait(entry->f_lock) ;
+					next = entry->forward_entry ;
+					semaphore_signal(entry->f_lock) ;
+					semaphore_wait(entry->count_lock) ;
+					entry->count-- ;
+					if ((entry->count == 1) and (entry->deletion == true)) {
+						// apply "busy waking up" to prevent starvation of the deleting thread
+						while (!(entry->post_count_sem)) // post_count_sem
+							semaphore_signal(entry->count_sem) ; // wake up the deleting thread
+						}
+					semaphore_signal(entry->count_lock) ; // a deleting thread should acquire count_lock before do the actual free()
+				}
+
 				entry = next ;
 			} while(entry!=first) ;
 		}
@@ -216,12 +240,13 @@
 
 	DataTable::chain_entry_t* DataTable::find(int pid) {
 
+		if (pid <= 0)
+			return NULL ; // validity check
 		bucket *b = &(buckets[pid % size]) ;
 		// acquire chain lock
 		semaphore_wait(b->chain_lock) ;
 		chain_entry_t *first = b->chain ;
 		semaphore_signal(b->chain_lock) ;
-
 		// traverse
 		if (first == NULL) return NULL ;
 		chain_entry_t *entry = first ;
@@ -240,8 +265,10 @@
 			semaphore_signal(entry->f_lock) ;
 			semaphore_wait(entry->count_lock) ;
 			entry->count-- ;
-			if ((entry->count == 1) and (entry->deletion)) {
-				semaphore_signal(entry->count_sem) ; // wake up the deleting thread
+			if ((entry->count == 1) and (entry->deletion == true)) {
+				// apply "busy waking up" to prevent starvation of the deleting thread
+				while (!(entry->post_count_sem)) // post_count_sem
+					semaphore_signal(entry->count_sem) ; // wake up the deleting thread
 			}
 			semaphore_signal(entry->count_lock) ; // a deleting thread should acquire count_lock before do the actual free()
 			entry = next ;
