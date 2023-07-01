@@ -7,10 +7,10 @@ mach_msg() return codes (printed) within test main function (SaveServer.cpp) def
 
 
 
-if we disable SaveClient destructor method logic (SaveClientHandler::SaveClient::~SaveClient()) we can notice the the server's collector thread work within the test main function output ("collector thread found ... ")  
+if we disable SaveClient destructor method logic (SaveClientHandler::SaveClient::~SaveClient()) we can notice the server's collector thread work within the test main function output ("collector thread found ... ")  
 
-because the direct father of the first client process (within the test main function) is the server which does not intentionaly collecting terminated children processes while running
-this first (child) client process continue to exist as zombie after its termination and can not be collected properlly by the collector thread (due to the checking logic limitations within DataTable::collect) ... 
+because the direct father of the first client process (within the test main function) is the server which does not intentionally collecting terminated children processes while running
+this first (child) client process continue to exist as zombie after its termination and can not be collected properly by the collector thread (due to the checking logic limitations within DataTable::collect) ... 
 if a call to libc wait() func would have been applied within the server loop, this first dead client would have be released and collected properly
-however this result of the specific test conditions should not be taken into consideration as part of the server runnig logic 
-morover, in a resonable use case client processes shoudn't be forked from the save_service system service process which should be started by the system with proper configurations (i.e. plist)
+however this result of the specific test conditions should not be taken into consideration as part of the server running logic 
+moreover, in a reasonable use case client processes shouldn't be forked from the save_service system service process which should be started by the system with proper configurations (i.e. plist)
