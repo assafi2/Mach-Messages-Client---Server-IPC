@@ -12,5 +12,5 @@ if we disable SaveClient destructor method logic (SaveClientHandler::SaveClient:
 because the direct father of the first client process (within the test main function) is the server which does not intentionally collecting terminated children processes while running
 this first (child) client process continue to exist as zombie after its termination and can not be collected properly by the collector thread (due to the checking logic limitations within DataTable::collect) ... 
 if a call to libc wait() func would have been applied within the server loop, this first dead client would have been released and collected properly
-however this result of the specific test conditions should not be taken into consideration as part of the server running logic 
-moreover, in a reasonable use case client processes shouldn't be forked from the save_service system service process which should be started by the system with proper configurations (i.e. plists)
+however this result of the specific test scenario should not be taken into consideration as part of the server running logic 
+moreover, in a reasonable use case client processes shouldn't be forked from the save_service system service process which should be started by the system in case of suitable configurations (i.e. plists)
